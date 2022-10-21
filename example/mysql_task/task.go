@@ -88,7 +88,7 @@ func main() {
 
 	}()
 
-	event.Run()
+	event.Run(context.TODO())
 
 }
 

@@ -4,6 +4,8 @@ import (
 	gContext "context"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/go-redis/redis/v9"
@@ -63,12 +65,15 @@ func New(taskHandle define.MetricTaskImpl) (*event, error) {
 	return &e, nil
 }
 
-func (e event) Run() {
+func (e event) Run(gctx gContext.Context) {
+	ctx := context.NewContexts(gctx)
+	// 处理quit信号
+	e.cancel(ctx)
+
 	// 与e.run 行程任务按顺序循环执行
 	for {
 		st := time.Now()
-		// TODO: env
-		e.run()
+		e.run(ctx)
 
 		execTs := time.Now().Sub(st)
 		// 小于30 秒，delay 1s
@@ -78,9 +83,23 @@ func (e event) Run() {
 	}
 }
 
-func (e event) run() {
+func (e event) cancel(ctx context.Context) {
+	cancelFn := ctx.Cancel()
 
-	ctx := context.NewContexts(gContext.TODO())
+	go func() {
+		quit := make(chan os.Signal, 1)
+
+		signal.Notify(quit)
+		//等待接收到退出信号：
+		<-quit
+		ctx.Log().Info("Server is shutting down...")
+		cancelFn()
+
+	}()
+}
+
+func (e event) run(ctx context.Context) {
+
 	defer ctx.Log().Sync()
 
 	ctx.Log().Infof("start event")
